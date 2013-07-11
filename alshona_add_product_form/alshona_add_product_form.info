@@ -1,0 +1,4 @@
+name = Add Products form 
+description = Alter the form of adding products
+core = 7.x 
+package = alshona

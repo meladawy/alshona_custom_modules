@@ -1,0 +1,8 @@
+.fieldloading:after{
+content: "";
+width: 32px;
+margin-left: 1em;
+background: url(../images/loading-small.gif) no-repeat;
+height: 32px;
+position: absolute;
+}

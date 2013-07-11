@@ -1,0 +1,56 @@
+<?php
+
+/**
+* @module
+* Alter adding product form
+*/
+
+
+
+
+/**
+* Implementation of hook_form_alter().
+*/
+function alshona_add_product_form_form_alter(&$form, &$form_state, $form_id){
+	if($form_id == "commerce_product_ui_product_form" && is_array($form['field_products_applicable_cars']['und'])) {
+		foreach($form['field_products_applicable_cars']['und'] as $key => $val){
+			if(is_numeric($key)){		
+				/* Load the array that contain the vehicle year select field options */
+				$vehicle_year_options_array = array();
+				$vehicle_year_options_array["_none"] = t("Select year...") ;
+				$vehicle_year_taxonomy_list = taxonomy_get_tree(10);
+				foreach($vehicle_year_taxonomy_list as $vehicle_year_taxonomy){
+				$vehicle_year_options_array[$vehicle_year_taxonomy->tid] = check_plain($vehicle_year_taxonomy->name) ;
+				}
+
+
+				/* Load the array that contain the vehicle make select field options */
+				$vehicle_make_options_array = array();
+				$vehicle_make_options_array["_none"] = t("Select make...") ;
+				
+				/* Load the array that contain the vehicle model select field options */
+				$vehicle_model_options_array = array();
+				$vehicle_model_options_array["_none"] = t("Select model...") ;				
+				
+				$form['field_products_applicable_cars']['und'][$key]['field_applicable_cars_year']['und']['#options'] = $vehicle_year_options_array;
+
+			    $form['field_products_applicable_cars']['und'][$key]['field_applicable_cars_make']['und']['#options']['_none'] = t("Select make...") ;
+	
+				$form['field_products_applicable_cars']['und'][$key]['field_applicable_cars_model']['und']['#options'] = $vehicle_model_options_array;
+
+				$form['#attached']['js'][] = drupal_get_path("module", "alshona_add_product_form")."/js/product_form.js" ;
+				$form['#attached']['css'][] = drupal_get_path("module", "alshona_add_product_form")."/css/product_form.css" ;
+
+			}
+		}
+	}
+}
+
+
+
+
+
+
+function _hello_im_test_something($element, &$form_state) {
+
+}

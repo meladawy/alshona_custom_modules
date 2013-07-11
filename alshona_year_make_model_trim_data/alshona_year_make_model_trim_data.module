@@ -1,0 +1,342 @@
+<?php
+
+/**
+* This module to export Cars Year, Make, Model and trim from other third party providers and store this data as taxonomy fields
+*/
+
+/**
+* Implementation of hook_init
+*/
+function alshona_year_make_model_trim_data_init(){
+// 	drupal_add_js("http://www.carqueryapi.com/js/carquery.0.3.3.js") ; 
+// 	drupal_add_js(drupal_get_path("module", "alshona_year_make_model_trim_data")."/js/script.js") ;
+	// Replace 10 with "Car Model Year" vocabulary VID to create new years or update current
+	// 	alshona_car_year_create_taxonomy_term(10) ; 
+
+	// to Add or update car makes from year to year, its currently updated to 2013
+//  	for($i=2012; $i<=2014 ; $i++){
+// 	alshona_car_make_create_taxonomy_term(11, $i)	;
+//  	}
+	
+	// To add models to car makes
+//     	alshona_car_model_create_taxonomy_term(12, "2010", "2014") ;
+	
+	
+	// update car by tid
+//   	_alshona_update_car_by_tid(12, 957) ; 
+
+
+	// Load brands
+//	_alshona_load_brands(13) ;
+}
+
+
+/**
+* Create Taxonomy term for car make yer
+*/
+function alshona_car_year_create_taxonomy_term($vid) {
+$url = "http://www.carqueryapi.com/api/0.3" ; 
+$data = array(
+ "callback" => "",
+ "cmd" => "getYears", 
+); 
+$full_url = url($url, array('query' => $data));
+$http_request_result = drupal_http_request($full_url) ; 
+if($http_request_result->code == 200) {
+	$http_request_json = str_replace(");","", $http_request_result->data) ; 
+	$http_request_json = str_replace("?(","", $http_request_json) ;
+	$http_request_json = str_replace("(","", $http_request_json) ;  
+
+	$json_decoded_text = drupal_json_decode($http_request_json) ;
+	$car_start_year = !empty($json_decoded_text['Years']['min_year']) ?  $json_decoded_text['Years']['min_year'] : 0 ; 
+	$car_end_year = !empty($json_decoded_text['Years']['max_year']) ?  $json_decoded_text['Years']['max_year'] : 0 ;
+	
+	for($i=$car_start_year; $i <= $car_end_year; $i++){
+		$term = new stdClass() ; 
+		$term->name = $i ; 
+		$term->vid = $vid ; 
+		
+		$get_taxonomy_by_name = taxonomy_get_term_by_name($i, "car_model_year") ;
+		if(count($get_taxonomy_by_name) == 0){
+		taxonomy_term_save($term) ; 
+		}else{
+		while(count($get_taxonomy_by_name) > 1){
+			$term_to_delete = array_shift($get_taxonomy_by_name) ; 
+			taxonomy_term_delete($term_to_delete->tid); 
+			} 
+		}
+		}
+	} 
+}
+
+
+
+
+/**
+* Create Taxonomy term for car make
+*/
+function alshona_car_make_create_taxonomy_term($vid, $year) {
+$url = "http://www.carparts.com/partfinder/make/year/".$year ; 
+$full_url = url($url);
+$http_request_result = drupal_http_request($full_url) ; 
+	if($http_request_result->code == 200) {
+		$http_request_data_result = !empty($http_request_result->data) ? explode("|",$http_request_result->data) : "" ; 
+		
+ 		if(count($http_request_data_result) > 0) {
+ 			foreach ($http_request_data_result as $make){
+ 			// Retrieve all the old taxonomies with the same name to check if its already exist
+ 			$old_taxonomy = taxonomy_get_term_by_name($make, "car_model_make") ;
+			while(count($old_taxonomy) > 1){
+			$term_to_delete = array_shift($old_taxonomy) ; 
+			taxonomy_term_delete($term_to_delete->tid); 
+			}
+ 
+ 			if(count($old_taxonomy)  == 0){
+				$term = new stdClass() ; 
+				$term->name = $make ; 
+				$term->vid = $vid ; 
+				$term->field_car_model_year['und'] = array() ; 
+				$year_term_id = taxonomy_get_term_by_name($year, "car_model_year") ;
+				$year_term = (count($year_term_id) > 0) ? array_shift($year_term_id) : "" ; 
+				if(!empty($year_term->tid)){
+				$term->field_car_model_year['und'][]['tid'] = $year_term->tid ; 
+				}
+				taxonomy_term_save($term) ; 
+				
+			}
+			
+			if(count($old_taxonomy) == 1) {
+				$term_to_update = array_shift($old_taxonomy) ; 
+				$year_term_id = taxonomy_get_term_by_name($year, "car_model_year") ;
+				$year_term = (count($year_term_id) > 0) ? array_shift($year_term_id) : "" ; 
+				if(!empty($year_term)){
+					$term_to_update->field_car_model_year['und'][]['tid'] = $year_term->tid ; 					
+					$term_to_update->field_car_model_year['und'] = array_unique($term_to_update->field_car_model_year['und']
+					, SORT_REGULAR);
+ 					taxonomy_term_save($term_to_update) ; 
+
+				}
+			}
+			
+			
+ 			}
+ 		}
+
+	
+	} 
+}
+
+
+
+
+/**
+* Create Taxonomy term for car models
+*/
+function alshona_car_model_create_taxonomy_term($vid, $startyear, $endyear) {
+$car_makes = taxonomy_get_tree(11) ;
+ foreach($car_makes as $key => $car_make) {
+
+ 	$car_make_term = taxonomy_term_load($car_make->tid) ; 
+	$car_make_name = $car_make_term->name; 
+	if(!empty($car_make_term->field_car_model_year['und'])){
+	
+	
+		foreach($car_make_term->field_car_model_year['und'] as $year_tid) {
+			$year_term = taxonomy_term_load($year_tid['tid']) ; 
+			$year_name = $year_term->name; 
+
+			if($year_name >=  $startyear && $year_name <= $endyear){
+			$url = "http://www.carparts.com/partfinder/model/year/".$year_name."/make/".str_replace(" ","%20", $car_make_name) ; 
+			$full_url = url($url);
+			$http_request_result = drupal_http_request($full_url) ; 
+			 	if($http_request_result->code == 200) {
+			 		$http_request_data_result = !empty($http_request_result->data) ? explode("|",$http_request_result->data) : "" ; 
+			 		
+			  		if(count($http_request_data_result) > 0) {
+			  		
+ 			foreach ($http_request_data_result as $model){
+ 			// Retrieve all the old taxonomies with the same name to check if its already exist
+ 			$old_taxonomy = taxonomy_get_term_by_name($model, "car_model") ;
+ 
+			if(count($old_taxonomy)  == 0){
+				$term = new stdClass() ; 
+				$term->name = $model ; 
+				$term->vid = $vid ; 
+				$term->field_car_model_year['und'] = array() ; 
+				$term->field_car_model_year['und'][]['tid'] = $year_term->tid ; 
+				$term->field_car_make['und'][]['tid'] = $car_make_term->tid; 
+				taxonomy_term_save($term) ; 
+			}
+ 			
+ 			
+			if(count($old_taxonomy) > 0){ 
+				$old_taxonomy_element = array_shift($old_taxonomy) ;
+				$query = new EntityFieldQuery();
+				$entities = $query->entityCondition('entity_type', 'taxonomy_term')
+				->propertyCondition('vid', 12) 
+				->propertyCondition('name', $model) 
+				->fieldCondition('field_car_make', 'tid', $car_make_term->tid , '=')
+				->execute();
+				$old_taxonomy_terms = !empty($entities['taxonomy_term']) ?  $entities['taxonomy_term'] : "";
+				// if make is not exist...update the current make
+				if(empty($old_taxonomy_terms)){
+					$old_taxonomy_element->field_car_make['und'][]['tid'] = $car_make_term->tid ;
+					$old_taxonomy_element->field_car_model_year['und'][]['tid'] = $year_term->tid ;					
+					taxonomy_term_save($old_taxonomy_element) ;
+				}else{
+				$query_2 = new EntityFieldQuery();
+				$entities_2 = $query->entityCondition('entity_type', 'taxonomy_term')
+				->propertyCondition('vid', 12) 
+				->propertyCondition('name', $model) 
+				->fieldCondition('field_car_make', 'tid', $car_make_term->tid , '=')
+  				->fieldCondition('field_car_model_year', 'tid', $year_term->tid , '=')
+				->execute();
+				$old_taxonomy_terms_2 = !empty($entities_2['taxonomy_term']) ?  $entities_2['taxonomy_term'] : "";	
+					if(empty($old_taxonomy_terms_2)){
+						$old_taxonomy_element->field_car_model_year['und'][]['tid'] = $year_term->tid ;
+						taxonomy_term_save($old_taxonomy_element) ;
+					}else{
+						// do nothing
+					}
+				}
+			}
+ 
+
+			
+			
+			
+ 			}
+				}
+
+	
+				}
+	
+		
+		
+		}
+		}
+	
+	
+	}
+	
+ }
+ 	
+}
+
+
+
+/**
+* Update car by tid
+*/
+function _alshona_update_car_by_tid($vid, $car_tid) {
+
+ 	$car_make_term = taxonomy_term_load($car_tid) ; 
+	$car_make_name = $car_make_term->name; 
+	if(!empty($car_make_term->field_car_model_year['und'])){
+		dsm($car_make_name . " Has been updated") ;
+ 		foreach($car_make_term->field_car_model_year['und'] as $year_tid) {
+			$year_term = taxonomy_term_load($year_tid['tid']) ; 
+			$year_name = $year_term->name; 
+			$url = "http://www.carparts.com/partfinder/model/year/".$year_name."/make/".str_replace(" ","%20", $car_make_name) ; 
+			$full_url = url($url);
+			$http_request_result = drupal_http_request($full_url) ;
+
+			 	if($http_request_result->code == 200) {
+			 		$http_request_data_result = !empty($http_request_result->data) ? explode("|",$http_request_result->data) : "" ; 
+			 		
+			  		if(count($http_request_data_result) > 0) {
+			  		
+ 			foreach ($http_request_data_result as $model){
+
+ 			// Retrieve all the old taxonomies with the same name to check if its already exist
+ 			$old_taxonomy = taxonomy_get_term_by_name($model, "car_model") ;
+ 
+			if(count($old_taxonomy)  == 0){
+				$term = new stdClass() ; 
+				$term->name = $model ; 
+				$term->vid = $vid ; 
+				$term->field_car_model_year['und'] = array() ; 
+				$term->field_car_model_year['und'][]['tid'] = $year_term->tid ; 
+				$term->field_car_make['und'][]['tid'] = $car_make_term->tid; 
+				taxonomy_term_save($term) ; 
+			}
+ 			
+ 			
+			if(count($old_taxonomy) > 0){ 
+
+				$old_taxonomy_element = array_shift($old_taxonomy) ;
+			
+				$query = new EntityFieldQuery();
+				$entities = $query->entityCondition('entity_type', 'taxonomy_term')
+				->propertyCondition('vid', 12) 
+				->propertyCondition('name', $model) 
+				->fieldCondition('field_car_make', 'tid', $car_make_term->tid , '=')
+				->execute();
+				$old_taxonomy_terms = !empty($entities['taxonomy_term']) ?  $entities['taxonomy_term'] : "";
+		
+
+				// if make is not exist...update the current make
+				if(empty($old_taxonomy_terms)){
+					$old_taxonomy_element->field_car_make['und'][]['tid'] = $car_make_term->tid ;
+					$old_taxonomy_element->field_car_model_year['und'][]['tid'] = $year_term->tid ;	
+									
+					taxonomy_term_save($old_taxonomy_element) ;
+				}else{
+				$query_2 = new EntityFieldQuery();
+				$entities_2 = $query->entityCondition('entity_type', 'taxonomy_term')
+				->propertyCondition('vid', 12) 
+				->propertyCondition('name', $model) 
+				->fieldCondition('field_car_make', 'tid', $car_make_term->tid , '=')
+  				->fieldCondition('field_car_model_year', 'tid', $year_term->tid , '=')
+				->execute();
+				$old_taxonomy_terms_2 = !empty($entities_2['taxonomy_term']) ?  $entities_2['taxonomy_term'] : "";	
+					if(empty($old_taxonomy_terms_2)){
+						$old_taxonomy_element->field_car_model_year['und'][]['tid'] = $year_term->tid ;
+						taxonomy_term_save($old_taxonomy_element) ;
+					}else{
+						// do nothing
+					}
+				}
+			}
+ 
+
+			
+			
+			
+ 			}
+				}
+
+	
+				}
+	
+		}
+	}
+
+ 	
+}
+
+
+
+/**
+* Load different products brands
+*/
+function _alshona_load_brands($vid){
+$url = "http://www.carparts.com/ajax/brand/" ; 
+$http_request_result = drupal_http_request($url) ; 
+	if($http_request_result->code == 200) {
+	$json_decoded_data = $http_request_result->data;
+	$json_decoded_text = drupal_json_decode($json_decoded_data) ;
+		foreach($json_decoded_text as $brand_item) {
+			$brand_name = $brand_item['brand_title'] ;
+			$old_brand = taxonomy_get_term_by_name($brand_name, "brand") ;
+ 
+			if(count($old_brand)  == 0){
+				$term = new stdClass() ; 
+				$term->name = $brand_name ; 
+				$term->vid = $vid  ; 
+				taxonomy_term_save($term) ; 
+			}
+			
+		}
+	}
+}

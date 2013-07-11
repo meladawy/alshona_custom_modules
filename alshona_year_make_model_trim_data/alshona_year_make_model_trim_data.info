@@ -1,0 +1,4 @@
+name = ALshona Year, Make, Model and Trim Data Export
+description = Retrieve year, make, model and trim data from other third party providers and store this data as taxonomy fields
+core = 7.x 
+package = alshona
