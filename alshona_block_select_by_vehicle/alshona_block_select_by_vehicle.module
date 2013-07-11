@@ -1,0 +1,244 @@
+<?php
+
+
+/**
+* Create block that allow users to filter products based on vehicle type
+*/
+
+/**
+* Implementation of hook_block_info().
+*/
+function alshona_block_select_by_vehicle_block_info(){
+  $blocks = array();
+  $blocks['select_by_vehicle'] = array(
+    'info' => t('Select by vehicle'),
+  );
+  return $blocks;
+}
+
+
+/**
+* Implementation of hook_block_view().
+*/
+function alshona_block_select_by_vehicle_block_view($delta = ''){
+	$blocks = array();
+	if($delta == "select_by_vehicle"){
+		$blocks['subject'] =  t('Shop by Vehicle') ;
+		$blocks['content'] = _alshona_shop_by_vehicle_block_content();
+	}
+	return $blocks;
+}
+
+
+
+/**
+* return the content of "Shop by vehicle" block
+*/
+function _alshona_shop_by_vehicle_block_content(){
+	drupal_add_js(drupal_get_path("module", "alshona_block_select_by_vehicle")."/js/alshona_select_by_vehicle_script.js") ;
+	$shop_by_vehicle_form = drupal_get_form('_alshona_shop_by_vehicle_form');
+	return drupal_render($shop_by_vehicle_form) ; 
+}
+
+
+/**
+* Called by drupal_get_form
+* for the "shop by vehicle" block
+* @return the form structure
+*/
+function _alshona_shop_by_vehicle_form($form, &$form_state){
+	/* Load the array that contain the vehicle year select field options */
+	$vehicle_year_options_array = array();
+	$vehicle_year_options_array[""] = t("Select year...") ;
+	$vehicle_year_taxonomy_list = taxonomy_get_tree(10);
+	foreach($vehicle_year_taxonomy_list as $vehicle_year_taxonomy){
+	$vehicle_year_options_array[$vehicle_year_taxonomy->tid] = check_plain($vehicle_year_taxonomy->name) ;
+	}
+	$vehicle_year_default_value = !empty($form_state['values']['vehicle_year']) ? $form_state['values']['vehicle_year'] : "";
+	
+
+	/* Load the array that contain the vehicle make select field options */
+	$vehicle_make_options_array = array();
+	$vehicle_make_options_array[""] = t("Select make...") ;
+	if(!empty($vehicle_year_default_value)){
+	$vehicle_make_query = new EntityFieldQuery();
+	$vehicle_make_entity = $vehicle_make_query->entityCondition('entity_type', 'taxonomy_term')
+	->propertyCondition('vid', 11) 
+	->fieldCondition('field_car_model_year', 'tid', $vehicle_year_default_value , '=')
+	->propertyOrderBy("name", "ASC")
+	->execute();
+	$vehicle_make_terms = !empty($vehicle_make_entity['taxonomy_term']) ?  $vehicle_make_entity['taxonomy_term'] : "";	
+	if(count($vehicle_make_terms) > 0){
+		foreach($vehicle_make_terms as $key => $value) {
+			$vehicle_make_taxonomy_load = taxonomy_term_load($key) ; 
+			$vehicle_make_options_array[$vehicle_make_taxonomy_load->tid] = check_plain($vehicle_make_taxonomy_load->name) ;  
+		}
+	}
+	}
+	$vehicle_make_default_value = !empty($form_state['values']['vehicle_make']) ? $form_state['values']['vehicle_make'] : "";
+
+	
+
+	/* Load the array that contain the vehicle model select field options */
+	$vehicle_model_options_array = array();
+	$vehicle_model_options_array[""] = t("Select model...") ;
+	if(!empty($vehicle_year_default_value) && !empty($vehicle_make_default_value)){
+	$vehicle_model_query = new EntityFieldQuery();
+	$vehicle_model_entity = $vehicle_model_query->entityCondition('entity_type', 'taxonomy_term')
+	->propertyCondition('vid', 12) 
+	->fieldCondition('field_car_model_year', 'tid', $vehicle_year_default_value , '=')	
+	->fieldCondition('field_car_make', 'tid', $vehicle_make_default_value , '=')
+	->propertyOrderBy("name", "ASC")
+	->execute();
+	$vehicle_model_terms = !empty($vehicle_model_entity['taxonomy_term']) ?  $vehicle_model_entity['taxonomy_term'] : "";	
+	if(count($vehicle_model_terms) > 0){
+		foreach($vehicle_model_terms as $key => $value) {
+			$vehicle_model_taxonomy_load = taxonomy_term_load($key) ; 
+			$vehicle_model_options_array[$vehicle_model_taxonomy_load->tid] = check_plain($vehicle_model_taxonomy_load->name) ;  
+		}
+	}
+	}
+
+
+	/* Change button has been clicked */
+	$changed_button = (!empty($form_state['clicked_button']['#value']) && $form_state['clicked_button']['#value'] == "Change") ? 1 : 0 ;
+	if($changed_button == 1) {
+	user_cookie_save(array('vehicle_year' => "", 'vehicle_make' => "", 'vehicle_model' => ""));
+	drupal_goto("") ;
+	}
+	
+	/* Car has been selected before*/
+	$vehicle_year = !empty($_COOKIE['Drupal_visitor_vehicle_year']) ? taxonomy_term_load($_COOKIE['Drupal_visitor_vehicle_year']) : "" ;
+	$vehicle_make = !empty($_COOKIE['Drupal_visitor_vehicle_make']) ? taxonomy_term_load($_COOKIE['Drupal_visitor_vehicle_make']) : "" ;
+	$vehicle_model = !empty($_COOKIE['Drupal_visitor_vehicle_model']) ? taxonomy_term_load($_COOKIE['Drupal_visitor_vehicle_model']) : "" ;
+	if(!empty($vehicle_year) && !empty($vehicle_make) && !empty($vehicle_model)){
+	$car_has_been_selected = 1 ;
+	}else{
+	$car_has_been_selected = 0 ;
+	}
+	
+	$form['vehicle_year'] = array(
+	  '#type' => 'select',
+	  '#options' => $vehicle_year_options_array ,
+	  '#attributes' => array('style' => "width:95%;"),	 
+	  '#prefix' => ($car_has_been_selected == 1) ? "<div class='hide-shop-by-car-form'>" : "", 
+	  '#ajax' => array(
+	    'callback' => "_alshona_ajax_vehicle_make_return",
+	  ),
+	  '#default_value' => $vehicle_year_default_value,
+	);
+	$form['vehicle_make'] = array(
+	  '#type' => 'select',
+	  '#options' => $vehicle_make_options_array ,
+	  '#attributes' => array('style' => "width:95%;"),	  
+	  '#prefix' => "<div id='wrapper-vehicle-make'>",
+	  '#suffix' => "</div>",
+	  '#ajax' => array(
+	    'wrapper' => "wrapper-vehicle-model",
+	    'callback' => "_alshona_ajax_vehicle_model_return",
+	  ),
+	);	
+	$form['vehicle_model'] = array(
+	  '#type' => 'select',
+	  '#options' => $vehicle_model_options_array,
+	  '#prefix' => "<div id='wrapper-vehicle-model'>",
+	  '#suffix' => "</div>",	  
+	  '#attributes' => array('style' => "width:95%;"),
+
+	);	
+	
+	
+	$form['submit'] = array(
+	  '#type' => 'submit',
+	  '#value' => t('Find My Parts'),
+	  '#suffix' => 	 ($car_has_been_selected == 1) ? "</div>" : "", 
+	  '#attributes' => array('class' => array('find-my-parts-button')),
+	);
+	
+
+	if(!empty($car_has_been_selected)):
+	$form['selected_vehicle'] = array(
+	  '#markup' => "<div class='shop-by-vehicle-selected-vehicle'>".$vehicle_year->name." ".$vehicle_make->name." ".$vehicle_model->name."</div>" ,
+	);	
+	
+	$form['reset'] = array(
+ 	  '#type' => 'button',
+ 	  '#value' => t('Change'),
+	  '#attributes' => array('class' => array('find-my-parts-button')), 	  
+	);
+	endif;
+	
+	$form['#attached']['js'][] = drupal_get_path("module", "alshona_block_select_by_vehicle")."/js/alshona_select_by_vehicle_script.js" ;
+	return $form;
+}
+
+
+/**
+* Validate the form "shop by vehicle" block
+* form_id = _alshona_shop_by_vehicle_form
+*/
+function _alshona_shop_by_vehicle_form_validate($form, &$form_state){
+	$vehicle_year = $form_state['values']['vehicle_year'] ;
+	$vehicle_make = $form_state['values']['vehicle_make'] ;
+	$vehicle_model = $form_state['values']['vehicle_model'] ;
+	
+	/* Change button has been clicked */
+	$changed_button = (!empty($form_state['clicked_button']['#value']) && $form_state['clicked_button']['#value'] == "Change") ? 1 : 0 ;
+	if($changed_button == 1) {
+	user_cookie_save(array('vehicle_year' => "", 'vehicle_make' => "", 'vehicle_model' => ""));
+	}	
+	
+	if(empty($changed_button)) :
+	
+	if(empty($vehicle_year)){
+	form_set_error("vehicle_year", t("Please select a year")) ;
+	}
+
+	if(empty($vehicle_make)){
+	form_set_error("vehicle_make", t("Please select a make")) ;
+	}	
+	
+	if(empty($vehicle_model)){
+	form_set_error("vehicle_model", t("Please select a model")) ;
+	}
+	
+	endif;
+	
+}
+
+
+/**
+* Submit the form "shop by vehicle" block
+* form_id = _alshona_shop_by_vehicle_form
+*/
+function _alshona_shop_by_vehicle_form_submit($form, &$form_state){
+	$vehicle_year = $form_state['values']['vehicle_year'] ;
+	$vehicle_make = $form_state['values']['vehicle_make'] ;
+	$vehicle_model = $form_state['values']['vehicle_model'] ;
+	user_cookie_save(array('vehicle_year' => $vehicle_year, 'vehicle_make' => $vehicle_make, 'vehicle_model' => $vehicle_model));
+}
+
+
+/**
+ * Callback element needs only select the portion of the form to be updated.
+ * Since #ajax['callback'] return can be HTML or a renderable array (or an
+ * array of commands), we can just return a piece of the form.
+ */
+function _alshona_ajax_vehicle_make_return($form, $form_state) {
+ return array(
+    '#type' => 'ajax',
+    '#commands' => array(
+      ajax_command_replace("#wrapper-vehicle-make", render($form['vehicle_make'])),
+      ajax_command_replace("#wrapper-vehicle-model", render($form['vehicle_model'])),
+    )
+  );
+}
+
+/**
+ * Callback element needs only select the portion of the form to be updated.
+ * Since #ajax['callback'] return can be HTML or a renderable array (or an
+ * array of commands), we can just return a piece of the form.
+ */
+function _alshona_ajax_vehicle_model_return($form, $form_state) {
+  return $form['vehicle_model'];
+}

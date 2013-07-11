@@ -1,0 +1,4 @@
+name = Select by vehicle block
+description = Create block that allow users to select products based on vehicle type
+core = 7.x 
+package = alshona
